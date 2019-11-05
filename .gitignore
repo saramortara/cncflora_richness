@@ -36,3 +36,4 @@ vignettes/*.pdf
 rsconnect/
 
 data/shapefile/
+results/hex_br/

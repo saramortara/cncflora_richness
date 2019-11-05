@@ -1,14 +1,19 @@
 #### Script to calculate species richness  ####
-# test w/ 302 endemic species from 2019
+# test w/ 302 Brazilian endemic species evaluated in 2019
+## species data
 # http://geonode.jbrj.gov.br/layers/geonode%3Areavaliacoes2019_cncflora
+## Brazil shapefile
+# https://data.humdata.org/dataset/f5f0648e-f085-4c85-8242-26bf6c942f40/resource/87e9a35e-4894-4950-972f-b565372df3e2/download/bra_adm0.zip
 
 # laoding packages
 library("rgdal")
-library("redlistr")
 library("dplyr")
 library("viridis")
 library("ggplot2")
+library("raster")
 
+## function from Matt Strimas-Mackey
+# http://strimas.com/spatial/hexagonal-grids/
 source("R/make_grid.R")
 
 # loading files
@@ -33,7 +38,19 @@ head(re_alb)
 #### Richness per grid ####
 # without clipping
 hex_br <- make_grid(br_alb, cell_area = 10000, clip = FALSE)
-dim(hex_br)
+
+hex_df <- data.frame(ID = row.names(hex_br))
+
+hex_spdf <- SpatialPolygonsDataFrame(hex_br, hex_df)
+
+plot(hex_br)
+
+class(hex_br)
+
+# writeOGR(hex_spdf,
+#          "results/hex_br",
+#          "hex_brasil",
+#          driver = "ESRI Shapefile")
 
 hex_re <- over(hex_br, re_alb, returnList = TRUE)
 
@@ -43,72 +60,42 @@ sapply(hex_re, nrow)
 
 length(unique(hex_re[[27]]$specie))
 
-rich <- data.frame(id = as.factor(row.names(hex_br)),
+rich <- data.frame(id = row.names(hex_br),
                    N = sapply(hex_re, function(x) length(unique(x$specie))))
 
-hex_rich <- SpatialPolygonsDataFrame(hex_br, rich)
 
-head(hex_rich, 27)
+hex_ft <- fortify(hex_spdf)
+hex_rich <- merge(hex_ft, rich, by = "id")
 
 head(hex_rich)
-names(hex_rich)
-summary(hex_rich)
-dim(hex_rich)
 
-rich_df <- broom::tidy(hex_rich)
+write.table(hex_rich, "results/hex_richness.csv",
+            col.names = TRUE,
+            row.names = FALSE,
+            sep = ",")
 
-dim(rich_df)
-
-summary(rich_df)
-
-rich_df$piece
-
-map <- ggplot() +
-  geom_polygon(data = hex_br,
-               aes(x = long, y = lat, group = group, fill = rich_df$piece ), colour = "black") +
-  theme_void()
-
-# point_density <- over(hex_br, re_alb, returnList = TRUE) %>%
-#   plyr::ldply(.fun = function(x) x, .id = "id") %>%
-#   mutate(id = as.character(id)) %>%
-#   count(id, specie) %>%
-#   left_join(fill_missing, ., by = c("id", "specie")) %>%
-#   bind_rows()
-
-
-
-head(fill_missing)
-dim(fill_missing)
-
-
-head(point_density)
-summary(point_density)
-
-
-
-
-
-map
-
-spplot(hex_rich)
-
-plot(hex_rich)
-
+pal <- wesanderson::wes_palette("Zissou1", 100, type = "continuous")
 
 map <- ggplot(hex_rich) +
-  geom_sf(aes(fill = id)) +
-  theme_void()
+  aes(long, lat, group = group, fill = N) +
+  theme_void() +
+  scale_fill_gradientn(colours = c("grey", pal)) +
+  geom_polygon() +
+  geom_path(color = "white") +
+  coord_equal() +
+  labs(title = "Richness of endangered species")
 
 map
 
-summary(hex_rich)
 
-head(hex_rich)
-dim(hex_rich)
+
 
 
 ########################### do not run ############
 # testing for 1 species
+
+#library("redlistr")
+
 species <- unique(re_alb$specie) %>%
   sort() %>%
   as.character()
